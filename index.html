@@ -85,8 +85,8 @@ scene.add(new THREE.HemisphereLight(0xb8d8ff,0x70a050,0.32));
 // ══════════════════════════════════════════
 const RISE=6, TREAD=12, LD=36, RAIL_H=36*0.70;
 const W=70, SW=35, RW=35;
-const SX = -W/2 + SW/2;   // step-half centre X  = -17.5
-const RX =  W/2 - RW/2;   // ramp-half centre X  = +17.5
+const SX =  W/2 - SW/2;   // step-half centre X  = +17.5  (swapped to right)
+const RX = -W/2 + RW/2;   // ramp-half centre X  = -17.5  (swapped to left)
 
 // Section Y/Z origins
 const S1_Y=0,  S1_Z=0;
@@ -319,7 +319,7 @@ for(let i=0;i<2;i++) addStep(i,S3_Y,S3_Z,6+i);
     cyl.castShadow=true; scene.add(cyl);
   }
 
-  // Key profile transitions [z, Y-surface]
+  // Key profile transitions [z, Y-surface] — steps side
   const profile = [
     [0,   0 ],
     [36,  18],
@@ -329,21 +329,28 @@ for(let i=0;i<2;i++) addStep(i,S3_Y,S3_Z,6+i);
     [168, 48]
   ];
 
-  // Posts only along first 3 steps: Z = 0, 12, 24, 36
+  // Posts at every major transition + midpoints of landings
   const postPts = [
-    [0,  0 ],
-    [12, 6 ],
-    [24, 12],
-    [36, 18]
+    [0,   0 ],[12,  6 ],[24,  12],
+    [36,  18],[54,  18],
+    [72,  18],[84,  24],[96,  30],
+    [108, 36],[126, 36],
+    [144, 36],[156, 42],[168, 48]
   ];
   postPts.forEach(([z,ys]) => post(z, ys, ys + RAIL_H));
 
-  // Top handrail: slopes with steps Z=0→36
-  handrail(0, 0+RAIL_H, 36, 18+RAIL_H, 1.05);
+  // Top handrail following full profile
+  for(let i=0;i<profile.length-1;i++){
+    const [z0,y0]=profile[i], [z1,y1]=profile[i+1];
+    handrail(z0, y0+RAIL_H, z1, y1+RAIL_H, 1.05);
+  }
 
-  // Mid handrail at ~55% height
+  // Mid handrail at 55%
   const MH = RAIL_H * 0.55;
-  handrail(0, 0+MH, 36, 18+MH, 0.70);
+  for(let i=0;i<profile.length-1;i++){
+    const [z0,y0]=profile[i], [z1,y1]=profile[i+1];
+    handrail(z0, y0+MH, z1, y1+MH, 0.70);
+  }
 })();
 
 // ══════════════════════════════════════════
