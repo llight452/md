@@ -3,349 +3,448 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3D Лестница</title>
+<title>3D Staircase + Ramp</title>
 <style>
-  *{margin:0;padding:0;box-sizing:border-box}
-  html,body{width:100%;height:100%;overflow:hidden}
-  canvas{display:block}
-  #ui{position:fixed;top:14px;left:50%;transform:translateX(-50%);
-    background:rgba(255,255,255,.25);backdrop-filter:blur(14px);
-    color:#222;padding:7px 22px;border-radius:30px;
-    font:12px/1 'Courier New',monospace;pointer-events:none;
-    white-space:nowrap;z-index:10;border:1px solid rgba(0,0,0,.12);letter-spacing:.05em}
-  #btn{position:fixed;bottom:18px;right:18px;
-    background:rgba(255,255,255,.3);backdrop-filter:blur(10px);
-    color:#222;padding:9px 18px;border-radius:20px;
-    font:12px 'Courier New',monospace;cursor:pointer;z-index:10;
-    border:1px solid rgba(0,0,0,.15);transition:all .2s}
-  #btn:hover{background:rgba(255,255,255,.5)}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden}
+canvas{display:block}
+#ui{position:fixed;top:14px;left:50%;transform:translateX(-50%);
+  background:rgba(255,255,255,.22);backdrop-filter:blur(14px);
+  color:#111;padding:7px 22px;border-radius:30px;
+  font:11px/1 'Courier New',monospace;pointer-events:none;
+  white-space:nowrap;z-index:10;border:1px solid rgba(0,0,0,.12)}
+#btn{position:fixed;bottom:18px;right:18px;
+  background:rgba(255,255,255,.28);backdrop-filter:blur(10px);
+  color:#111;padding:9px 18px;border-radius:20px;
+  font:11px 'Courier New',monospace;cursor:pointer;z-index:10;
+  border:1px solid rgba(0,0,0,.15)}
 </style>
 </head>
 <body>
-<div id="ui">🖱 Drag — вращение &nbsp;|&nbsp; Scroll — масштаб &nbsp;|&nbsp; ПКМ — пан</div>
-<button id="btn" onclick="toggleAuto()">⟳ Авто: ВКЛ</button>
+<div id="ui">Drag — rotate &nbsp;|&nbsp; Scroll — zoom &nbsp;|&nbsp; RMB — pan</div>
+<button id="btn" onclick="toggleAuto()">⟳ Auto: ON</button>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   RENDERER / SCENE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-const scene = new THREE.Scene();
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.setSize(innerWidth, innerHeight);
+// ══════════════════════════════════════════
+//  RENDERER
+// ══════════════════════════════════════════
+const renderer = new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
+renderer.toneMapping       = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 document.body.appendChild(renderer.domElement);
 
-const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.5, 2000);
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(52, innerWidth/innerHeight, 0.5, 2000);
 window.addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight;
+  camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth, innerHeight);
-  rebuildSky();
+  renderer.setSize(innerWidth,innerHeight);
+  buildSky();
 });
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   SKY DOME
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+// ══════════════════════════════════════════
+//  SKY
+// ══════════════════════════════════════════
 let skyMesh;
-function rebuildSky() {
-  if (skyMesh) scene.remove(skyMesh);
-  skyMesh = new THREE.Mesh(
-    new THREE.SphereGeometry(1000, 32, 16),
-    new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      vertexShader: `varying vec3 vPos; void main(){ vPos=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-      fragmentShader: `
-        varying vec3 vPos;
-        void main(){
-          float t=clamp((normalize(vPos).y+0.1)*1.5,0.,1.);
-          vec3 col=mix(vec3(0.80,0.91,0.98),mix(vec3(0.55,0.78,0.97),vec3(0.24,0.52,0.87),t),t);
-          gl_FragColor=vec4(col,1.);
-        }`
-    })
-  );
+function buildSky(){
+  if(skyMesh) scene.remove(skyMesh);
+  skyMesh = new THREE.Mesh(new THREE.SphereGeometry(1000,32,16), new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    vertexShader: `varying vec3 vP;void main(){vP=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+    fragmentShader:`varying vec3 vP;void main(){
+      float t=clamp((normalize(vP).y+0.1)*1.5,0.,1.);
+      vec3 c=mix(vec3(.82,.91,.98),mix(vec3(.55,.78,.97),vec3(.24,.52,.87),t),t);
+      gl_FragColor=vec4(c,1.);}`
+  }));
   scene.add(skyMesh);
 }
-rebuildSky();
+buildSky();
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   LIGHTS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-scene.add(new THREE.AmbientLight(0xe8f4ff, 0.6));
+// ══════════════════════════════════════════
+//  LIGHTS
+// ══════════════════════════════════════════
+scene.add(new THREE.AmbientLight(0xe8f4ff, 0.58));
 const sun = new THREE.DirectionalLight(0xfff8e8, 1.3);
-sun.position.set(150, 300, 100);
+sun.position.set(150,300,100);
 sun.castShadow = true;
-sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.mapSize.set(4096,4096);
 const sc = sun.shadow.camera;
-sc.left=-200; sc.right=300; sc.top=180; sc.bottom=-40; sc.far=700;
+sc.left=-220; sc.right=320; sc.top=200; sc.bottom=-40; sc.far=700;
 scene.add(sun);
-const fill2 = new THREE.DirectionalLight(0xc0d8ff, 0.28);
-fill2.position.set(-80, 60, -100);
-scene.add(fill2);
-scene.add(new THREE.HemisphereLight(0xb8d8ff, 0x70a050, 0.32));
+const fill = new THREE.DirectionalLight(0xc0d8ff, 0.3);
+fill.position.set(-80,60,-100);
+scene.add(fill);
+scene.add(new THREE.HemisphereLight(0xb8d8ff,0x70a050,0.32));
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   DIMENSIONS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-const RISE = 6, TREAD = 12, W = 30, LD = 36;
+// ══════════════════════════════════════════
+//  CONSTANTS  (units = inches)
+// ══════════════════════════════════════════
+const RISE=6, TREAD=12, LD=36, RAIL_H=36*0.70;
+const W=70, SW=35, RW=35;
+const SX = -W/2 + SW/2;   // step-half centre X  = -17.5
+const RX =  W/2 - RW/2;   // ramp-half centre X  = +17.5
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   MATERIALS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function mPh(hex, sh) { return new THREE.MeshPhongMaterial({ color: hex, shininess: sh || 10 }); }
-
-const M = {
-  tread:   mPh(0xF0E6D4, 18),
-  cap:     mPh(0xFAF0E2, 30),
-  riser:   mPh(0xD9C4A4, 10),
-  landing: mPh(0xE8D8BC, 15),
-  landCap: mPh(0xF4EAD4, 28),
-  fill:    mPh(0xC8B090, 6),
-};
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   TEXTURE FACTORY
-   Creates a graffiti-style canvas texture
-   with BLACK text, white outline for pop
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function makeTex(lines, opts) {
-  opts = opts || {};
-  const cw = opts.cw || 512, ch = opts.ch || 220;
-  const canvas = document.createElement('canvas');
-  canvas.width = cw; canvas.height = ch;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, cw, ch);
-
-  // Subtle tinted wash so text pops on concrete
-  ctx.fillStyle = 'rgba(255,255,255,0.10)';
-  ctx.fillRect(0, 0, cw, ch);
-
-  const LH = ch / (lines.length + 0.5);
-  lines.forEach((ln, i) => {
-    if (!ln) return;
-    const fs = Math.round(LH * (i === 0 ? 0.72 : 0.62));
-    ctx.font = `900 ${fs}px Arial Black, Arial, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const y = LH * (i + 0.75);
-
-    // White halo (so text pops on any concrete shade)
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-    ctx.lineWidth = fs * 0.18;
-    ctx.lineJoin = 'round';
-    ctx.strokeText(ln, cw / 2, y);
-
-    // BLACK fill
-    ctx.fillStyle = '#000000';
-    ctx.fillText(ln, cw / 2, y);
-  });
-
-  const tex = new THREE.CanvasTexture(canvas);
-  return tex;
-}
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   DECAL HELPER
-   Places a flat decal plane on a surface
-   fwd: normal direction of the face
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function decal(tex, pos, rotX, rotY, rotZ, scaleW, scaleH) {
-  const geo = new THREE.PlaneGeometry(scaleW, scaleH);
-  const mat = new THREE.MeshBasicMaterial({
-    map: tex, transparent: true, opacity: 0.92,
-    depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2
-  });
-  const m = new THREE.Mesh(geo, mat);
-  m.rotation.set(rotX, rotY, rotZ);
-  m.position.copy(pos);
-  m.renderOrder = 2;
-  scene.add(m);
-}
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   STEP BUILDER  — labels on ALL 5 visible faces
-   (top, front riser, left side, right side, back)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function addStep(localIdx, baseY, startZ, globalN) {
-  const tY = baseY + (localIdx + 1) * RISE;   // top face Y
-  const fZ = startZ + localIdx * TREAD;        // front face Z
-  const cz = fZ + TREAD / 2;                   // centre Z
-  const eps = 0.5;                              // offset from surface
-
-  // ── Geometry ──
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(W, RISE, TREAD), M.tread);
-  slab.position.set(0, tY - RISE / 2, cz);
-  slab.castShadow = true; slab.receiveShadow = true; scene.add(slab);
-
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(W + 0.4, 1.2, TREAD + 1.6), M.cap);
-  cap.position.set(0, tY + 0.6, cz + 0.8);
-  cap.castShadow = true; scene.add(cap);
-
-  const riserMesh = new THREE.Mesh(new THREE.BoxGeometry(W, RISE, 0.8), M.riser);
-  riserMesh.position.set(0, tY - RISE / 2, fZ + 0.4);
-  scene.add(riserMesh);
-
-  if (localIdx > 0) {
-    const fb = new THREE.Mesh(new THREE.BoxGeometry(W - 0.2, localIdx * RISE, TREAD), M.fill);
-    fb.position.set(0, baseY + localIdx * RISE / 2, cz);
-    fb.receiveShadow = true; scene.add(fb);
-  }
-
-  const n = globalN + 1;
-  const topLines    = [`СТ.${n}  12"×30"`, `ПОДЪЁМ 6"`];
-  const riserLines  = [`СТ.${n}  ПОДЪЁМ 6"`, `ПРОСТУПЬ 12"  ШИР 30"`];
-  const sideLines   = [`СТ.${n}`, `↕6"  ↔12"`];
-
-  // 1. TOP face
-  const tTex = makeTex(topLines, { cw: 512, ch: 200 });
-  decal(tTex,
-    new THREE.Vector3(0, tY + 1.25, cz),
-    -Math.PI / 2, 0, 0,
-    W * 0.88, TREAD * 0.82
-  );
-
-  // 2. FRONT face (riser)
-  const fTex = makeTex(riserLines, { cw: 512, ch: 200 });
-  decal(fTex,
-    new THREE.Vector3(0, tY - RISE / 2, fZ + eps),
-    0, 0, 0,
-    W * 0.85, RISE * 0.82
-  );
-
-  // 3. BACK face
-  decal(fTex,
-    new THREE.Vector3(0, tY - RISE / 2, fZ + TREAD - eps),
-    0, Math.PI, 0,
-    W * 0.85, RISE * 0.82
-  );
-
-  // 4. LEFT face
-  const lTex = makeTex(sideLines, { cw: 360, ch: 200 });
-  decal(lTex,
-    new THREE.Vector3(-W / 2 - eps, tY - RISE / 2, cz),
-    0, -Math.PI / 2, 0,
-    TREAD * 0.82, RISE * 0.80
-  );
-
-  // 5. RIGHT face
-  decal(lTex,
-    new THREE.Vector3(W / 2 + eps, tY - RISE / 2, cz),
-    0, Math.PI / 2, 0,
-    TREAD * 0.82, RISE * 0.80
-  );
-}
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   LANDING BUILDER — labels on ALL faces
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function addLanding(landY, startZ, num) {
-  const th = 6, eps = 0.5;
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(W, th, LD), M.landing);
-  mesh.position.set(0, landY - th / 2, startZ + LD / 2);
-  mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
-
-  const lcap = new THREE.Mesh(new THREE.BoxGeometry(W + 0.4, 1.2, LD + 0.5), M.landCap);
-  lcap.position.set(0, landY + 0.6, startZ + LD / 2);
-  lcap.castShadow = true; scene.add(lcap);
-
-  const topLines  = [`ПЛАТО ${num}  36"×30"`, `ВЫСОТА ${landY}"`];
-  const sideLines = [`ПЛАТО ${num}  36"×30"`];
-  const frontLines= [`ПЛАТО ${num}  ШИР 30"`, `ГЛУБ 36"  Н:${landY}"`];
-
-  const tTex = makeTex(topLines,  { cw: 512, ch: 200 });
-  const sTex = makeTex(sideLines, { cw: 512, ch: 160 });
-  const fTex = makeTex(frontLines,{ cw: 512, ch: 200 });
-
-  // Top
-  decal(tTex, new THREE.Vector3(0, landY + 1.25, startZ + LD / 2),
-    -Math.PI / 2, 0, 0, W * 0.88, LD * 0.80);
-
-  // Front
-  decal(fTex, new THREE.Vector3(0, landY - th / 2, startZ + eps),
-    0, 0, 0, W * 0.85, th * 0.80);
-
-  // Back
-  decal(fTex, new THREE.Vector3(0, landY - th / 2, startZ + LD - eps),
-    0, Math.PI, 0, W * 0.85, th * 0.80);
-
-  // Left
-  decal(sTex, new THREE.Vector3(-W / 2 - eps, landY - th / 2, startZ + LD / 2),
-    0, -Math.PI / 2, 0, LD * 0.82, th * 0.78);
-
-  // Right
-  decal(sTex, new THREE.Vector3(W / 2 + eps, landY - th / 2, startZ + LD / 2),
-    0, Math.PI / 2, 0, LD * 0.82, th * 0.78);
-}
-
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   BUILD STAIRCASE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+// Section Y/Z origins
 const S1_Y=0,  S1_Z=0;
 const L1_Y=18, L1_Z=36;
 const S2_Y=18, S2_Z=72;
 const L2_Y=36, L2_Z=108;
 const S3_Y=36, S3_Z=144;
+const totalZ=168;
 
-for (let i = 0; i < 3; i++) addStep(i, S1_Y, S1_Z, i);
-addLanding(L1_Y, L1_Z, 1);
-for (let i = 0; i < 3; i++) addStep(i, S2_Y, S2_Z, 3 + i);
-addLanding(L2_Y, L2_Z, 2);
-for (let i = 0; i < 2; i++) addStep(i, S3_Y, S3_Z, 6 + i);
+// ══════════════════════════════════════════
+//  MATERIALS
+// ══════════════════════════════════════════
+const mStep  = new THREE.MeshPhongMaterial({color:0xEDE0CE,shininess:15});
+const mCap   = new THREE.MeshPhongMaterial({color:0xF7F0E4,shininess:28});
+const mRiser = new THREE.MeshPhongMaterial({color:0xD4BFA0,shininess:8});
+const mLand  = new THREE.MeshPhongMaterial({color:0xE8D8C0,shininess:12});
+const mFill  = new THREE.MeshPhongMaterial({color:0xC0A878,shininess:4});
+const mRamp  = new THREE.MeshPhongMaterial({color:0xD8CCBA,shininess:20});
+const mRail  = new THREE.MeshPhongMaterial({color:0xEDE0CE,shininess:20});
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   GROUND (grass)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-(function () {
-  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#607848'; ctx.fillRect(0, 0, 512, 512);
-  for (let i = 0; i < 4000; i++) {
-    const x = Math.random() * 512, y = Math.random() * 512, r = Math.random() * 5 + 1;
-    ctx.fillStyle = Math.random() > .5 ? 'rgba(100,148,60,.5)' : 'rgba(40,70,20,.45)';
-    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+// ══════════════════════════════════════════
+//  LABEL HELPERS
+//  Canvas aspect ratio = plane aspect ratio → no stretching
+//  No internal canvas rotation → no blurring / clipping
+// ══════════════════════════════════════════
+function makeLabel(lines, pw, ph){
+  const PX = 16; // pixels per scene-unit (inch)
+  const cw  = Math.max(256, Math.round(pw * PX));
+  const ch  = Math.max(64,  Math.round(ph * PX));
+  const cv  = document.createElement('canvas');
+  cv.width=cw; cv.height=ch;
+  const ctx = cv.getContext('2d');
+  const valid = lines.filter(l => l && l.length > 0);
+  const lh = ch / valid.length;
+  valid.forEach((line, i) => {
+    const fs = Math.min(Math.round(lh * 0.50), Math.round(cw * 0.28));
+    const fontSize = Math.max(8, fs);
+    ctx.font = `bold ${fontSize}px Arial,sans-serif`;
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    const y = (i + 0.5) * lh;
+    // crisp white halo
+    ctx.strokeStyle = 'rgba(255,255,255,0.98)';
+    ctx.lineWidth   = Math.max(3, fontSize * 0.30);
+    ctx.lineJoin    = 'round';
+    ctx.strokeText(line, cw/2, y);
+    // solid black fill
+    ctx.fillStyle = '#000000';
+    ctx.fillText(line, cw/2, y);
+  });
+  return new THREE.CanvasTexture(cv);
+}
+
+// Place a flat label in the scene
+function addLabel(x,y,z, rx,ry,rz, pw,ph, lines){
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(pw, ph),
+    new THREE.MeshBasicMaterial({
+      map: makeLabel(lines,pw,ph),
+      transparent:true, opacity:0.95,
+      depthWrite:false, polygonOffset:true, polygonOffsetFactor:-2,
+      side: THREE.DoubleSide
+    })
+  );
+  mesh.rotation.set(rx,ry,rz);
+  mesh.position.set(x,y,z);
+  mesh.renderOrder = 5;
+  scene.add(mesh);
+}
+
+// Label lying on an angled ramp surface
+function addRampSurfaceLabel(zMid,yMid, angle, lines){
+  const pw=RW*0.75, ph=11;
+  const cosA=Math.cos(angle), sinA=Math.sin(angle);
+  const offN=5; // units above surface
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(pw,ph),
+    new THREE.MeshBasicMaterial({
+      map: makeLabel(lines,pw,ph),
+      transparent:true, opacity:0.95,
+      depthWrite:false, polygonOffset:true, polygonOffsetFactor:-2,
+      side: THREE.DoubleSide
+    })
+  );
+  mesh.rotation.x = -(Math.PI/2 + angle);
+  mesh.position.set(RX, yMid + offN*cosA, zMid + offN*(-sinA));
+  mesh.renderOrder = 5;
+  scene.add(mesh);
+}
+
+// ══════════════════════════════════════════
+//  STEP BUILDER  (left half, X-centred at SX)
+// ══════════════════════════════════════════
+function addStep(localIdx, baseY, startZ, globalN){
+  const tY = baseY + (localIdx+1)*RISE;
+  const fZ = startZ + localIdx*TREAD;
+  const cz = fZ + TREAD/2;
+  const E  = 0.4;
+
+  // Slab
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(SW,RISE,TREAD), mStep);
+  slab.position.set(SX, tY-RISE/2, cz);
+  slab.castShadow=true; slab.receiveShadow=true; scene.add(slab);
+
+  // Nosing cap
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(SW+0.3,1.2,TREAD+1.5), mCap);
+  cap.position.set(SX, tY+0.6, cz+0.75);
+  cap.castShadow=true; scene.add(cap);
+
+  // Riser face (thin slab)
+  const rm = new THREE.Mesh(new THREE.BoxGeometry(SW,RISE,0.8), mRiser);
+  rm.position.set(SX, tY-RISE/2, fZ+0.4); scene.add(rm);
+
+  // Fill volume under step
+  if(localIdx>0){
+    const fh=localIdx*RISE;
+    const fb=new THREE.Mesh(new THREE.BoxGeometry(SW-0.2,fh,TREAD),mFill);
+    fb.position.set(SX, baseY+fh/2, cz); fb.receiveShadow=true; scene.add(fb);
   }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(50, 50);
-  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400),
-    new THREE.MeshLambertMaterial({ map: tex, color: 0x90b868 }));
-  gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true;
-  scene.add(gnd);
-  const grid = new THREE.GridHelper(1400, 100, 0x4a6830, 0x3a5224);
-  grid.position.y = 0.3; scene.add(grid);
+
+  const n = globalN+1;
+  // Top face label
+  addLabel(SX, tY+1.3, cz, -Math.PI/2,0,0,
+    SW*0.80, TREAD*0.60, [`ST-${n}`, `R:${RISE}"  T:${TREAD}"`]);
+  // Front riser label (faces viewer approaching from -Z)
+  addLabel(SX, tY-RISE/2, fZ-E, 0,Math.PI,0,
+    SW*0.72, RISE*0.68, [`ST-${n}`, `${RISE}×${TREAD}"`]);
+}
+
+// ══════════════════════════════════════════
+//  LANDING BUILDER  (left half)
+// ══════════════════════════════════════════
+function addLanding(landY, startZ, num){
+  const th=6, E=0.4;
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(SW,th,LD),mLand);
+  mesh.position.set(SX, landY-th/2, startZ+LD/2);
+  mesh.castShadow=true; mesh.receiveShadow=true; scene.add(mesh);
+
+  const lcap=new THREE.Mesh(new THREE.BoxGeometry(SW+0.3,1.2,LD+0.4),mCap);
+  lcap.position.set(SX, landY+0.6, startZ+LD/2);
+  lcap.castShadow=true; scene.add(lcap);
+
+  addLabel(SX, landY+1.3, startZ+LD/2, -Math.PI/2,0,0,
+    SW*0.78, LD*0.58, [`LANDING-${num}`, `${LD}"×${SW}"`, `H:${landY}"`]);
+}
+
+// ══════════════════════════════════════════
+//  RAMP BUILDER  — 5 segments
+//  Profile:  slope(0-36) → flat(36-72) → slope(72-108)
+//            → flat(108-144) → slope(144-168)
+// ══════════════════════════════════════════
+function addRampSegment(zStart,yStart,zEnd,yEnd){
+  const run  = zEnd - zStart;
+  const rise = yEnd - yStart;
+  const thick = 7;
+
+  if(Math.abs(rise) < 0.01){
+    // ── FLAT PLATEAU ──
+    const mesh=new THREE.Mesh(new THREE.BoxGeometry(RW,thick,run),mRamp);
+    mesh.position.set(RX, yStart-thick/2, (zStart+zEnd)/2);
+    mesh.castShadow=true; mesh.receiveShadow=true; scene.add(mesh);
+    addLabel(RX, yStart+1.5, (zStart+zEnd)/2, -Math.PI/2,0,0,
+      RW*0.76, run*0.52, [`FLAT  ${run}"`, `H: ${yStart}"`]);
+
+  } else {
+    // ── SLOPE ──
+    const angle  = Math.atan2(rise, run);
+    const diagLen= Math.sqrt(run*run + rise*rise);
+    const cosA   = Math.cos(angle), sinA = Math.sin(angle);
+
+    // Position so top-front corner lands at world (RX, yStart, zStart)
+    const cy = yStart - ( thick/2*cosA - diagLen/2*sinA);
+    const cz_= zStart - (-thick/2*sinA - diagLen/2*cosA);
+
+    const mesh=new THREE.Mesh(new THREE.BoxGeometry(RW,thick,diagLen),mRamp);
+    mesh.rotation.x = -angle;
+    mesh.position.set(RX, cy, cz_);
+    mesh.castShadow=true; mesh.receiveShadow=true; scene.add(mesh);
+
+    const pct = Math.round(rise*100/run);
+    addRampSurfaceLabel(
+      zStart + run/2, yStart + rise/2, angle,
+      [`RAMP  ${run}"↗${rise}"`, `slope: ${pct}%`]
+    );
+  }
+}
+
+// Build ramp
+addRampSegment(0,   0,  36, 18);   // slope 1  (0→36 run, 0→18 rise)
+addRampSegment(36,  18, 72, 18);   // plateau 1
+addRampSegment(72,  18,108, 36);   // slope 2  (72→108, 18→36)
+addRampSegment(108, 36,144, 36);   // plateau 2
+addRampSegment(144, 36,168, 48);   // slope 3  (144→168, 36→48)
+
+// ══════════════════════════════════════════
+//  BUILD STAIRCASE
+// ══════════════════════════════════════════
+for(let i=0;i<3;i++) addStep(i,S1_Y,S1_Z,i);
+addLanding(L1_Y,L1_Z,1);
+for(let i=0;i<3;i++) addStep(i,S2_Y,S2_Z,3+i);
+addLanding(L2_Y,L2_Z,2);
+for(let i=0;i<2;i++) addStep(i,S3_Y,S3_Z,6+i);
+
+// ══════════════════════════════════════════
+//  RAILING  — at X=0 (between ramp and steps)
+// ══════════════════════════════════════════
+(function buildRailing(){
+  const X = 0;  // boundary line
+
+  function post(z, yBot, yTop){
+    const h = yTop - yBot;
+    if(h <= 0) return;
+    const p = new THREE.Mesh(new THREE.BoxGeometry(1.8,h,1.8), mRail);
+    p.position.set(X, yBot+h/2, z);
+    p.castShadow=true; scene.add(p);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(1.2,8,6), mRail);
+    cap.position.set(X, yTop, z);
+    scene.add(cap);
+  }
+
+  // Cylinder along the YZ slope from (z0,y0) to (z1,y1)
+  function handrail(z0,y0,z1,y1, rad=1.05){
+    const dz=z1-z0, dy=y1-y0;
+    const len=Math.sqrt(dz*dz+dy*dy);
+    if(len<0.1) return;
+    const cyl=new THREE.Mesh(new THREE.CylinderGeometry(rad,rad,len,12), mRail);
+    // rotation.x = atan2(dz,dy) aligns cylinder axis with (0,dy,dz) direction
+    cyl.rotation.x = Math.atan2(dz,dy);
+    cyl.position.set(X, (y0+y1)/2, (z0+z1)/2);
+    cyl.castShadow=true; scene.add(cyl);
+  }
+
+  // Key profile transitions [z, Y-surface]
+  const profile = [
+    [0,   0 ],
+    [36,  18],
+    [72,  18],
+    [108, 36],
+    [144, 36],
+    [168, 48]
+  ];
+
+  // Posts only along first 3 steps: Z = 0, 12, 24, 36
+  const postPts = [
+    [0,  0 ],
+    [12, 6 ],
+    [24, 12],
+    [36, 18]
+  ];
+  postPts.forEach(([z,ys]) => post(z, ys, ys + RAIL_H));
+
+  // Top handrail: slopes with steps Z=0→36
+  handrail(0, 0+RAIL_H, 36, 18+RAIL_H, 1.05);
+
+  // Mid handrail at ~55% height
+  const MH = RAIL_H * 0.55;
+  handrail(0, 0+MH, 36, 18+MH, 0.70);
 })();
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   STONE PATH under stair
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-(function () {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#b0a090'; ctx.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 60; i++) {
-    const x=Math.random()*256,y=Math.random()*256,rx=Math.random()*18+6,ry=Math.random()*12+4;
-    ctx.fillStyle=`rgba(${110+Math.random()*40|0},${90+Math.random()*30|0},${70+Math.random()*30|0},0.35)`;
-    ctx.beginPath(); ctx.ellipse(x,y,rx,ry,Math.random()*Math.PI,0,Math.PI*2); ctx.fill();
+// ══════════════════════════════════════════
+//  STONE WALLS  (positions SWAPPED)
+// ══════════════════════════════════════════
+(function buildWalls(){
+
+  function makeStoneTex(wL,wH){
+    const C=256, c=document.createElement('canvas'); c.width=C; c.height=C;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='#9a8878'; ctx.fillRect(0,0,C,C);
+    const rows=6, cols=4, bW=C/cols, bH=C/rows;
+    for(let r=0;r<rows;r++) for(let cl=0;cl<cols;cl++){
+      const ox=(r%2===0?bW/2:0);
+      const x=(cl*bW+ox)%C, y=r*bH;
+      const g=118+Math.random()*42;
+      ctx.fillStyle=`rgb(${g},${g-10},${g-22})`;
+      ctx.fillRect(x+2,y+2,bW-5,bH-5);
+    }
+    ctx.strokeStyle='#6a5a4a'; ctx.lineWidth=3;
+    for(let r=0;r<=rows;r++){ctx.beginPath();ctx.moveTo(0,r*bH);ctx.lineTo(C,r*bH);ctx.stroke();}
+    for(let r=0;r<rows;r++){
+      const ox=(r%2===0?bW/2:0);
+      for(let cl=0;cl<=cols;cl++){
+        const x=(cl*bW+ox)%C;
+        ctx.beginPath();ctx.moveTo(x,r*bH);ctx.lineTo(x,(r+1)*bH);ctx.stroke();
+      }
+    }
+    const tex=new THREE.CanvasTexture(c);
+    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
+    tex.repeat.set(wL/48,wH/48);
+    return tex;
   }
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(6, 16);
-  const p = new THREE.Mesh(new THREE.PlaneGeometry(W + 30, 240),
-    new THREE.MeshPhongMaterial({ map: tex, shininess: 6 }));
-  p.rotation.x = -Math.PI / 2; p.position.set(0, 0.6, 84);
-  p.receiveShadow = true; scene.add(p);
+
+  function makeGrassTex(){
+    const C=128, c=document.createElement('canvas'); c.width=C; c.height=C;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='#5a8a38'; ctx.fillRect(0,0,C,C);
+    for(let i=0;i<450;i++){
+      ctx.fillStyle=Math.random()>.5?'rgba(88,148,50,.5)':'rgba(38,68,18,.4)';
+      ctx.beginPath(); ctx.arc(Math.random()*C,Math.random()*C,Math.random()*4+1,0,Math.PI*2); ctx.fill();
+    }
+    const tex=new THREE.CanvasTexture(c);
+    tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(3,3);
+    return tex;
+  }
+
+  const grassMat=new THREE.MeshLambertMaterial({map:makeGrassTex(),color:0x78b050});
+
+  function makeWall(cx,cy,cz, wW,wH,wL, label){
+    const mat=new THREE.MeshPhongMaterial({map:makeStoneTex(wL,wH),shininess:6,color:0xb0a090});
+    const body=new THREE.Mesh(new THREE.BoxGeometry(wW,wH,wL),mat);
+    body.position.set(cx,cy,cz); body.castShadow=true; body.receiveShadow=true; scene.add(body);
+    const grass=new THREE.Mesh(new THREE.BoxGeometry(wW+1,3,wL+1),grassMat);
+    grass.position.set(cx,cy+wH/2+1.5,cz); scene.add(grass);
+    // Label on outer face
+    const E=0.5;
+    if(cx>0){
+      addLabel(cx+wW/2+E, cy, cz, 0,Math.PI/2,0,
+        wL*0.72, wH*0.62, [label, `${wL}"×${wH}"`]);
+    } else {
+      addLabel(cx-wW/2-E, cy, cz, 0,-Math.PI/2,0,
+        wL*0.72, wH*0.62, [label, `${wL}"×${wH}"`]);
+    }
+  }
+
+  // SWAPPED: bigger wall (was left) → now RIGHT side
+  const w1L=totalZ-48, w1H=20, w1W=50;
+  makeWall( W/2+w1W/2,  w1H/2, 48+w1L/2, w1W,w1H,w1L, 'WALL-R');
+
+  // Smaller wall (was right) → now LEFT side
+  const w2L=totalZ-60, w2H=25, w2W=25;
+  makeWall(-W/2-w2W/2, w2H/2, 60+w2L/2, w2W,w2H,w2L, 'WALL-L');
 })();
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   CLOUDS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-(function () {
-  const c = document.createElement('canvas'); c.width = 300; c.height = 140;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, 300, 140);
+// ══════════════════════════════════════════
+//  GRASS GROUND
+// ══════════════════════════════════════════
+(function(){
+  const c=document.createElement('canvas'); c.width=256; c.height=256;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#607848'; ctx.fillRect(0,0,256,256);
+  for(let i=0;i<2000;i++){
+    ctx.fillStyle=Math.random()>.5?'rgba(96,144,56,.5)':'rgba(40,68,18,.4)';
+    ctx.beginPath(); ctx.arc(Math.random()*256,Math.random()*256,Math.random()*4+1,0,Math.PI*2); ctx.fill();
+  }
+  const tex=new THREE.CanvasTexture(c);
+  tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(60,60);
+  const gnd=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400),
+    new THREE.MeshLambertMaterial({map:tex,color:0x88b060}));
+  gnd.rotation.x=-Math.PI/2; gnd.receiveShadow=true; scene.add(gnd);
+  const grid=new THREE.GridHelper(1400,100,0x4a6830,0x3a5224);
+  grid.position.y=0.3; scene.add(grid);
+})();
+
+// ══════════════════════════════════════════
+//  CLOUDS
+// ══════════════════════════════════════════
+(function(){
+  const c=document.createElement('canvas'); c.width=300; c.height=140;
+  const ctx=c.getContext('2d'); ctx.clearRect(0,0,300,140);
   [[90,70,60],[150,55,75],[210,65,55],[115,95,42],[175,88,40]].forEach(([cx,cy,r])=>{
     const g=ctx.createRadialGradient(cx,cy,r*.08,cx,cy,r);
     g.addColorStop(0,'rgba(255,255,255,.95)');
@@ -353,89 +452,80 @@ for (let i = 0; i < 2; i++) addStep(i, S3_Y, S3_Z, 6 + i);
     g.addColorStop(1,'rgba(200,225,255,0)');
     ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
   });
-  const tex = new THREE.CanvasTexture(c);
+  const tex=new THREE.CanvasTexture(c);
   [[0,320,-200],[240,290,20],[-260,310,120],[120,270,310],[-140,345,-110]].forEach(([x,y,z])=>{
-    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, opacity:.88, depthWrite:false }));
-    sp.position.set(x,y,z);
-    const s = 90 + Math.random()*60;
-    sp.scale.set(s*2.4, s, 1);
-    scene.add(sp);
+    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:.85,depthWrite:false}));
+    sp.position.set(x,y,z); const s=90+Math.random()*60; sp.scale.set(s*2.4,s,1); scene.add(sp);
   });
 })();
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   CAMERA ORBIT
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-let theta = 0.72, phi = 1.08, radius = 230;
-const target = new THREE.Vector3(0, 24, 84);
-let autoRot = true;
+// ══════════════════════════════════════════
+//  CAMERA ORBIT
+// ══════════════════════════════════════════
+let theta=0.68, phi=1.10, radius=260;
+const target=new THREE.Vector3(0,28,84);
+let autoRot=true;
 
-function sync() {
+function sync(){
   camera.position.set(
-    target.x + radius * Math.sin(phi) * Math.sin(theta),
-    target.y + radius * Math.cos(phi),
-    target.z + radius * Math.sin(phi) * Math.cos(theta)
+    target.x + radius*Math.sin(phi)*Math.sin(theta),
+    target.y + radius*Math.cos(phi),
+    target.z + radius*Math.sin(phi)*Math.cos(theta)
   );
   camera.lookAt(target);
 }
 sync();
 
-let drag = false, rDrag = false, px = 0, py = 0;
-renderer.domElement.addEventListener('mousedown', e => {
-  drag = true; rDrag = e.button === 2; px = e.clientX; py = e.clientY; e.preventDefault();
-});
-renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
-window.addEventListener('mouseup', () => drag = false);
-window.addEventListener('mousemove', e => {
-  if (!drag) return;
-  const dx = e.clientX - px, dy = e.clientY - py; px = e.clientX; py = e.clientY;
-  if (rDrag) {
-    const r = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),
-      new THREE.Vector3().subVectors(camera.position, target).normalize()).normalize();
-    target.addScaledVector(r, -dx * 0.22); target.y += dy * 0.22;
+let drag=false, rDrag=false, px=0, py=0;
+renderer.domElement.addEventListener('mousedown',e=>{drag=true;rDrag=e.button===2;px=e.clientX;py=e.clientY;e.preventDefault();});
+renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
+window.addEventListener('mouseup',()=>drag=false);
+window.addEventListener('mousemove',e=>{
+  if(!drag)return;
+  const dx=e.clientX-px, dy=e.clientY-py; px=e.clientX; py=e.clientY;
+  if(rDrag){
+    const r=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),
+      new THREE.Vector3().subVectors(camera.position,target).normalize()).normalize();
+    target.addScaledVector(r,-dx*0.25); target.y+=dy*0.25;
   } else {
-    theta -= dx * 0.012;
-    phi = Math.max(0.05, Math.min(Math.PI * 0.92, phi - dy * 0.012));
+    theta-=dx*0.012;
+    phi=Math.max(0.05,Math.min(Math.PI*0.92,phi-dy*0.012));
   }
   sync();
 });
-renderer.domElement.addEventListener('wheel', e => {
-  radius = Math.max(40, Math.min(600, radius * (1 + e.deltaY * 0.001)));
-  sync();
-}, { passive: true });
+renderer.domElement.addEventListener('wheel',e=>{
+  radius=Math.max(40,Math.min(700,radius*(1+e.deltaY*0.001))); sync();
+},{passive:true});
 
-let prevP = 0;
-renderer.domElement.addEventListener('touchstart', e => {
+let prevP=0;
+renderer.domElement.addEventListener('touchstart',e=>{
   e.preventDefault();
-  if (e.touches.length === 1) { drag=true; rDrag=false; px=e.touches[0].clientX; py=e.touches[0].clientY; }
-  if (e.touches.length === 2) { drag=false; prevP=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); }
-}, { passive: false });
-renderer.domElement.addEventListener('touchmove', e => {
+  if(e.touches.length===1){drag=true;rDrag=false;px=e.touches[0].clientX;py=e.touches[0].clientY;}
+  if(e.touches.length===2){drag=false;prevP=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);}
+},{passive:false});
+renderer.domElement.addEventListener('touchmove',e=>{
   e.preventDefault();
-  if (e.touches.length===1 && drag) {
+  if(e.touches.length===1&&drag){
     const dx=e.touches[0].clientX-px, dy=e.touches[0].clientY-py;
     px=e.touches[0].clientX; py=e.touches[0].clientY;
     theta-=dx*0.012; phi=Math.max(0.05,Math.min(Math.PI*0.92,phi-dy*0.012)); sync();
   }
-  if (e.touches.length===2) {
+  if(e.touches.length===2){
     const p=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-    radius=Math.max(40,Math.min(600,radius*(prevP/p))); prevP=p; sync();
+    radius=Math.max(40,Math.min(700,radius*(prevP/p))); prevP=p; sync();
   }
-}, { passive: false });
-renderer.domElement.addEventListener('touchend', () => drag = false);
+},{passive:false});
+renderer.domElement.addEventListener('touchend',()=>drag=false);
 
-function toggleAuto() {
-  autoRot = !autoRot;
-  document.getElementById('btn').textContent = '⟳ Авто: ' + (autoRot ? 'ВКЛ' : 'ВЫКЛ');
+function toggleAuto(){
+  autoRot=!autoRot;
+  document.getElementById('btn').textContent='⟳ Auto: '+(autoRot?'ON':'OFF');
 }
 
-/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   RENDER LOOP
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
-function animate() {
+function animate(){
   requestAnimationFrame(animate);
-  if (autoRot && !drag) { theta += 0.003; sync(); }
-  renderer.render(scene, camera);
+  if(autoRot&&!drag){theta+=0.003;sync();}
+  renderer.render(scene,camera);
 }
 animate();
 </script>
