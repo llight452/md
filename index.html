@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3D Лестница</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden}
+  canvas{display:block}
+  #ui{position:fixed;top:14px;left:50%;transform:translateX(-50%);
+    background:rgba(255,255,255,.25);backdrop-filter:blur(14px);
+    color:#222;padding:7px 22px;border-radius:30px;
+    font:12px/1 'Courier New',monospace;pointer-events:none;
+    white-space:nowrap;z-index:10;border:1px solid rgba(0,0,0,.12);letter-spacing:.05em}
+  #btn{position:fixed;bottom:18px;right:18px;
+    background:rgba(255,255,255,.3);backdrop-filter:blur(10px);
+    color:#222;padding:9px 18px;border-radius:20px;
+    font:12px 'Courier New',monospace;cursor:pointer;z-index:10;
+    border:1px solid rgba(0,0,0,.15);transition:all .2s}
+  #btn:hover{background:rgba(255,255,255,.5)}
+</style>
+</head>
+<body>
+<div id="ui">🖱 Drag — вращение &nbsp;|&nbsp; Scroll — масштаб &nbsp;|&nbsp; ПКМ — пан</div>
+<button id="btn" onclick="toggleAuto()">⟳ Авто: ВКЛ</button>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   RENDERER / SCENE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+const scene = new THREE.Scene();
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+document.body.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(52, innerWidth / innerHeight, 0.5, 2000);
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  rebuildSky();
+});
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   SKY DOME
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+let skyMesh;
+function rebuildSky() {
+  if (skyMesh) scene.remove(skyMesh);
+  skyMesh = new THREE.Mesh(
+    new THREE.SphereGeometry(1000, 32, 16),
+    new THREE.ShaderMaterial({
+      side: THREE.BackSide,
+      vertexShader: `varying vec3 vPos; void main(){ vPos=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+      fragmentShader: `
+        varying vec3 vPos;
+        void main(){
+          float t=clamp((normalize(vPos).y+0.1)*1.5,0.,1.);
+          vec3 col=mix(vec3(0.80,0.91,0.98),mix(vec3(0.55,0.78,0.97),vec3(0.24,0.52,0.87),t),t);
+          gl_FragColor=vec4(col,1.);
+        }`
+    })
+  );
+  scene.add(skyMesh);
+}
+rebuildSky();
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   LIGHTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+scene.add(new THREE.AmbientLight(0xe8f4ff, 0.6));
+const sun = new THREE.DirectionalLight(0xfff8e8, 1.3);
+sun.position.set(150, 300, 100);
+sun.castShadow = true;
+sun.shadow.mapSize.set(4096, 4096);
+const sc = sun.shadow.camera;
+sc.left=-200; sc.right=300; sc.top=180; sc.bottom=-40; sc.far=700;
+scene.add(sun);
+const fill2 = new THREE.DirectionalLight(0xc0d8ff, 0.28);
+fill2.position.set(-80, 60, -100);
+scene.add(fill2);
+scene.add(new THREE.HemisphereLight(0xb8d8ff, 0x70a050, 0.32));
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   DIMENSIONS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+const RISE = 6, TREAD = 12, W = 30, LD = 36;
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   MATERIALS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function mPh(hex, sh) { return new THREE.MeshPhongMaterial({ color: hex, shininess: sh || 10 }); }
+
+const M = {
+  tread:   mPh(0xF0E6D4, 18),
+  cap:     mPh(0xFAF0E2, 30),
+  riser:   mPh(0xD9C4A4, 10),
+  landing: mPh(0xE8D8BC, 15),
+  landCap: mPh(0xF4EAD4, 28),
+  fill:    mPh(0xC8B090, 6),
+};
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   TEXTURE FACTORY
+   Creates a graffiti-style canvas texture
+   with BLACK text, white outline for pop
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function makeTex(lines, opts) {
+  opts = opts || {};
+  const cw = opts.cw || 512, ch = opts.ch || 220;
+  const canvas = document.createElement('canvas');
+  canvas.width = cw; canvas.height = ch;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, cw, ch);
+
+  // Subtle tinted wash so text pops on concrete
+  ctx.fillStyle = 'rgba(255,255,255,0.10)';
+  ctx.fillRect(0, 0, cw, ch);
+
+  const LH = ch / (lines.length + 0.5);
+  lines.forEach((ln, i) => {
+    if (!ln) return;
+    const fs = Math.round(LH * (i === 0 ? 0.72 : 0.62));
+    ctx.font = `900 ${fs}px Arial Black, Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const y = LH * (i + 0.75);
+
+    // White halo (so text pops on any concrete shade)
+    ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+    ctx.lineWidth = fs * 0.18;
+    ctx.lineJoin = 'round';
+    ctx.strokeText(ln, cw / 2, y);
+
+    // BLACK fill
+    ctx.fillStyle = '#000000';
+    ctx.fillText(ln, cw / 2, y);
+  });
+
+  const tex = new THREE.CanvasTexture(canvas);
+  return tex;
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   DECAL HELPER
+   Places a flat decal plane on a surface
+   fwd: normal direction of the face
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function decal(tex, pos, rotX, rotY, rotZ, scaleW, scaleH) {
+  const geo = new THREE.PlaneGeometry(scaleW, scaleH);
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex, transparent: true, opacity: 0.92,
+    depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.rotation.set(rotX, rotY, rotZ);
+  m.position.copy(pos);
+  m.renderOrder = 2;
+  scene.add(m);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   STEP BUILDER  — labels on ALL 5 visible faces
+   (top, front riser, left side, right side, back)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function addStep(localIdx, baseY, startZ, globalN) {
+  const tY = baseY + (localIdx + 1) * RISE;   // top face Y
+  const fZ = startZ + localIdx * TREAD;        // front face Z
+  const cz = fZ + TREAD / 2;                   // centre Z
+  const eps = 0.5;                              // offset from surface
+
+  // ── Geometry ──
+  const slab = new THREE.Mesh(new THREE.BoxGeometry(W, RISE, TREAD), M.tread);
+  slab.position.set(0, tY - RISE / 2, cz);
+  slab.castShadow = true; slab.receiveShadow = true; scene.add(slab);
+
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(W + 0.4, 1.2, TREAD + 1.6), M.cap);
+  cap.position.set(0, tY + 0.6, cz + 0.8);
+  cap.castShadow = true; scene.add(cap);
+
+  const riserMesh = new THREE.Mesh(new THREE.BoxGeometry(W, RISE, 0.8), M.riser);
+  riserMesh.position.set(0, tY - RISE / 2, fZ + 0.4);
+  scene.add(riserMesh);
+
+  if (localIdx > 0) {
+    const fb = new THREE.Mesh(new THREE.BoxGeometry(W - 0.2, localIdx * RISE, TREAD), M.fill);
+    fb.position.set(0, baseY + localIdx * RISE / 2, cz);
+    fb.receiveShadow = true; scene.add(fb);
+  }
+
+  const n = globalN + 1;
+  const topLines    = [`СТ.${n}  12"×30"`, `ПОДЪЁМ 6"`];
+  const riserLines  = [`СТ.${n}  ПОДЪЁМ 6"`, `ПРОСТУПЬ 12"  ШИР 30"`];
+  const sideLines   = [`СТ.${n}`, `↕6"  ↔12"`];
+
+  // 1. TOP face
+  const tTex = makeTex(topLines, { cw: 512, ch: 200 });
+  decal(tTex,
+    new THREE.Vector3(0, tY + 1.25, cz),
+    -Math.PI / 2, 0, 0,
+    W * 0.88, TREAD * 0.82
+  );
+
+  // 2. FRONT face (riser)
+  const fTex = makeTex(riserLines, { cw: 512, ch: 200 });
+  decal(fTex,
+    new THREE.Vector3(0, tY - RISE / 2, fZ + eps),
+    0, 0, 0,
+    W * 0.85, RISE * 0.82
+  );
+
+  // 3. BACK face
+  decal(fTex,
+    new THREE.Vector3(0, tY - RISE / 2, fZ + TREAD - eps),
+    0, Math.PI, 0,
+    W * 0.85, RISE * 0.82
+  );
+
+  // 4. LEFT face
+  const lTex = makeTex(sideLines, { cw: 360, ch: 200 });
+  decal(lTex,
+    new THREE.Vector3(-W / 2 - eps, tY - RISE / 2, cz),
+    0, -Math.PI / 2, 0,
+    TREAD * 0.82, RISE * 0.80
+  );
+
+  // 5. RIGHT face
+  decal(lTex,
+    new THREE.Vector3(W / 2 + eps, tY - RISE / 2, cz),
+    0, Math.PI / 2, 0,
+    TREAD * 0.82, RISE * 0.80
+  );
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   LANDING BUILDER — labels on ALL faces
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function addLanding(landY, startZ, num) {
+  const th = 6, eps = 0.5;
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(W, th, LD), M.landing);
+  mesh.position.set(0, landY - th / 2, startZ + LD / 2);
+  mesh.castShadow = true; mesh.receiveShadow = true; scene.add(mesh);
+
+  const lcap = new THREE.Mesh(new THREE.BoxGeometry(W + 0.4, 1.2, LD + 0.5), M.landCap);
+  lcap.position.set(0, landY + 0.6, startZ + LD / 2);
+  lcap.castShadow = true; scene.add(lcap);
+
+  const topLines  = [`ПЛАТО ${num}  36"×30"`, `ВЫСОТА ${landY}"`];
+  const sideLines = [`ПЛАТО ${num}  36"×30"`];
+  const frontLines= [`ПЛАТО ${num}  ШИР 30"`, `ГЛУБ 36"  Н:${landY}"`];
+
+  const tTex = makeTex(topLines,  { cw: 512, ch: 200 });
+  const sTex = makeTex(sideLines, { cw: 512, ch: 160 });
+  const fTex = makeTex(frontLines,{ cw: 512, ch: 200 });
+
+  // Top
+  decal(tTex, new THREE.Vector3(0, landY + 1.25, startZ + LD / 2),
+    -Math.PI / 2, 0, 0, W * 0.88, LD * 0.80);
+
+  // Front
+  decal(fTex, new THREE.Vector3(0, landY - th / 2, startZ + eps),
+    0, 0, 0, W * 0.85, th * 0.80);
+
+  // Back
+  decal(fTex, new THREE.Vector3(0, landY - th / 2, startZ + LD - eps),
+    0, Math.PI, 0, W * 0.85, th * 0.80);
+
+  // Left
+  decal(sTex, new THREE.Vector3(-W / 2 - eps, landY - th / 2, startZ + LD / 2),
+    0, -Math.PI / 2, 0, LD * 0.82, th * 0.78);
+
+  // Right
+  decal(sTex, new THREE.Vector3(W / 2 + eps, landY - th / 2, startZ + LD / 2),
+    0, Math.PI / 2, 0, LD * 0.82, th * 0.78);
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   BUILD STAIRCASE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+const S1_Y=0,  S1_Z=0;
+const L1_Y=18, L1_Z=36;
+const S2_Y=18, S2_Z=72;
+const L2_Y=36, L2_Z=108;
+const S3_Y=36, S3_Z=144;
+
+for (let i = 0; i < 3; i++) addStep(i, S1_Y, S1_Z, i);
+addLanding(L1_Y, L1_Z, 1);
+for (let i = 0; i < 3; i++) addStep(i, S2_Y, S2_Z, 3 + i);
+addLanding(L2_Y, L2_Z, 2);
+for (let i = 0; i < 2; i++) addStep(i, S3_Y, S3_Z, 6 + i);
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   GROUND (grass)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+(function () {
+  const c = document.createElement('canvas'); c.width = 512; c.height = 512;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#607848'; ctx.fillRect(0, 0, 512, 512);
+  for (let i = 0; i < 4000; i++) {
+    const x = Math.random() * 512, y = Math.random() * 512, r = Math.random() * 5 + 1;
+    ctx.fillStyle = Math.random() > .5 ? 'rgba(100,148,60,.5)' : 'rgba(40,70,20,.45)';
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(50, 50);
+  const gnd = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400),
+    new THREE.MeshLambertMaterial({ map: tex, color: 0x90b868 }));
+  gnd.rotation.x = -Math.PI / 2; gnd.receiveShadow = true;
+  scene.add(gnd);
+  const grid = new THREE.GridHelper(1400, 100, 0x4a6830, 0x3a5224);
+  grid.position.y = 0.3; scene.add(grid);
+})();
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   STONE PATH under stair
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+(function () {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#b0a090'; ctx.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 60; i++) {
+    const x=Math.random()*256,y=Math.random()*256,rx=Math.random()*18+6,ry=Math.random()*12+4;
+    ctx.fillStyle=`rgba(${110+Math.random()*40|0},${90+Math.random()*30|0},${70+Math.random()*30|0},0.35)`;
+    ctx.beginPath(); ctx.ellipse(x,y,rx,ry,Math.random()*Math.PI,0,Math.PI*2); ctx.fill();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(6, 16);
+  const p = new THREE.Mesh(new THREE.PlaneGeometry(W + 30, 240),
+    new THREE.MeshPhongMaterial({ map: tex, shininess: 6 }));
+  p.rotation.x = -Math.PI / 2; p.position.set(0, 0.6, 84);
+  p.receiveShadow = true; scene.add(p);
+})();
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   CLOUDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+(function () {
+  const c = document.createElement('canvas'); c.width = 300; c.height = 140;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, 300, 140);
+  [[90,70,60],[150,55,75],[210,65,55],[115,95,42],[175,88,40]].forEach(([cx,cy,r])=>{
+    const g=ctx.createRadialGradient(cx,cy,r*.08,cx,cy,r);
+    g.addColorStop(0,'rgba(255,255,255,.95)');
+    g.addColorStop(.7,'rgba(235,245,255,.55)');
+    g.addColorStop(1,'rgba(200,225,255,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+  });
+  const tex = new THREE.CanvasTexture(c);
+  [[0,320,-200],[240,290,20],[-260,310,120],[120,270,310],[-140,345,-110]].forEach(([x,y,z])=>{
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map:tex, transparent:true, opacity:.88, depthWrite:false }));
+    sp.position.set(x,y,z);
+    const s = 90 + Math.random()*60;
+    sp.scale.set(s*2.4, s, 1);
+    scene.add(sp);
+  });
+})();
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   CAMERA ORBIT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+let theta = 0.72, phi = 1.08, radius = 230;
+const target = new THREE.Vector3(0, 24, 84);
+let autoRot = true;
+
+function sync() {
+  camera.position.set(
+    target.x + radius * Math.sin(phi) * Math.sin(theta),
+    target.y + radius * Math.cos(phi),
+    target.z + radius * Math.sin(phi) * Math.cos(theta)
+  );
+  camera.lookAt(target);
+}
+sync();
+
+let drag = false, rDrag = false, px = 0, py = 0;
+renderer.domElement.addEventListener('mousedown', e => {
+  drag = true; rDrag = e.button === 2; px = e.clientX; py = e.clientY; e.preventDefault();
+});
+renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+window.addEventListener('mouseup', () => drag = false);
+window.addEventListener('mousemove', e => {
+  if (!drag) return;
+  const dx = e.clientX - px, dy = e.clientY - py; px = e.clientX; py = e.clientY;
+  if (rDrag) {
+    const r = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),
+      new THREE.Vector3().subVectors(camera.position, target).normalize()).normalize();
+    target.addScaledVector(r, -dx * 0.22); target.y += dy * 0.22;
+  } else {
+    theta -= dx * 0.012;
+    phi = Math.max(0.05, Math.min(Math.PI * 0.92, phi - dy * 0.012));
+  }
+  sync();
+});
+renderer.domElement.addEventListener('wheel', e => {
+  radius = Math.max(40, Math.min(600, radius * (1 + e.deltaY * 0.001)));
+  sync();
+}, { passive: true });
+
+let prevP = 0;
+renderer.domElement.addEventListener('touchstart', e => {
+  e.preventDefault();
+  if (e.touches.length === 1) { drag=true; rDrag=false; px=e.touches[0].clientX; py=e.touches[0].clientY; }
+  if (e.touches.length === 2) { drag=false; prevP=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY); }
+}, { passive: false });
+renderer.domElement.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (e.touches.length===1 && drag) {
+    const dx=e.touches[0].clientX-px, dy=e.touches[0].clientY-py;
+    px=e.touches[0].clientX; py=e.touches[0].clientY;
+    theta-=dx*0.012; phi=Math.max(0.05,Math.min(Math.PI*0.92,phi-dy*0.012)); sync();
+  }
+  if (e.touches.length===2) {
+    const p=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    radius=Math.max(40,Math.min(600,radius*(prevP/p))); prevP=p; sync();
+  }
+}, { passive: false });
+renderer.domElement.addEventListener('touchend', () => drag = false);
+
+function toggleAuto() {
+  autoRot = !autoRot;
+  document.getElementById('btn').textContent = '⟳ Авто: ' + (autoRot ? 'ВКЛ' : 'ВЫКЛ');
+}
+
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   RENDER LOOP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+function animate() {
+  requestAnimationFrame(animate);
+  if (autoRot && !drag) { theta += 0.003; sync(); }
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
