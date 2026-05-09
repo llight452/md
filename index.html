@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>3D Staircase + Ramp</title>
+<title>Staircase + Walls</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden}
@@ -25,506 +25,274 @@ canvas{display:block}
 <button id="btn" onclick="toggleAuto()">⟳ Auto: ON</button>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
-// ══════════════════════════════════════════
-//  RENDERER
-// ══════════════════════════════════════════
-const renderer = new THREE.WebGLRenderer({antialias:true});
+
+var renderer=new THREE.WebGLRenderer({antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.setSize(innerWidth,innerHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type    = THREE.PCFSoftShadowMap;
-renderer.toneMapping       = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.05;
 document.body.appendChild(renderer.domElement);
 
-const scene  = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(52, innerWidth/innerHeight, 0.5, 2000);
-window.addEventListener('resize', () => {
-  camera.aspect = innerWidth/innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(innerWidth,innerHeight);
-  buildSky();
+var scene=new THREE.Scene();
+var camera=new THREE.PerspectiveCamera(52,innerWidth/innerHeight,0.5,2000);
+window.addEventListener('resize',function(){
+  camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);buildSky();
 });
 
-// ══════════════════════════════════════════
-//  SKY
-// ══════════════════════════════════════════
-let skyMesh;
+var skyMesh;
 function buildSky(){
-  if(skyMesh) scene.remove(skyMesh);
-  skyMesh = new THREE.Mesh(new THREE.SphereGeometry(1000,32,16), new THREE.ShaderMaterial({
-    side: THREE.BackSide,
-    vertexShader: `varying vec3 vP;void main(){vP=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
-    fragmentShader:`varying vec3 vP;void main(){
-      float t=clamp((normalize(vP).y+0.1)*1.5,0.,1.);
-      vec3 c=mix(vec3(.82,.91,.98),mix(vec3(.55,.78,.97),vec3(.24,.52,.87),t),t);
-      gl_FragColor=vec4(c,1.);}`
+  if(skyMesh)scene.remove(skyMesh);
+  skyMesh=new THREE.Mesh(new THREE.SphereGeometry(1000,32,16),new THREE.ShaderMaterial({
+    side:THREE.BackSide,
+    vertexShader:'varying vec3 vP;void main(){vP=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    fragmentShader:'varying vec3 vP;void main(){float t=clamp((normalize(vP).y+0.1)*1.5,0.,1.);vec3 c=mix(vec3(.82,.91,.98),mix(vec3(.55,.78,.97),vec3(.24,.52,.87),t),t);gl_FragColor=vec4(c,1.);}'
   }));
   scene.add(skyMesh);
 }
 buildSky();
 
-// ══════════════════════════════════════════
-//  LIGHTS
-// ══════════════════════════════════════════
-scene.add(new THREE.AmbientLight(0xe8f4ff, 0.58));
-const sun = new THREE.DirectionalLight(0xfff8e8, 1.3);
-sun.position.set(150,300,100);
-sun.castShadow = true;
+scene.add(new THREE.AmbientLight(0xe8f4ff,0.58));
+var sun=new THREE.DirectionalLight(0xfff8e8,1.3);
+sun.position.set(150,300,100);sun.castShadow=true;
 sun.shadow.mapSize.set(4096,4096);
-const sc = sun.shadow.camera;
-sc.left=-220; sc.right=320; sc.top=200; sc.bottom=-40; sc.far=700;
+sun.shadow.camera.left=-350;sun.shadow.camera.right=350;
+sun.shadow.camera.top=300;sun.shadow.camera.bottom=-50;sun.shadow.camera.far=900;
 scene.add(sun);
-const fill = new THREE.DirectionalLight(0xc0d8ff, 0.3);
-fill.position.set(-80,60,-100);
-scene.add(fill);
+var fill=new THREE.DirectionalLight(0xc0d8ff,0.3);
+fill.position.set(-80,60,-100);scene.add(fill);
 scene.add(new THREE.HemisphereLight(0xb8d8ff,0x70a050,0.32));
 
-// ══════════════════════════════════════════
-//  CONSTANTS  (units = inches)
-// ══════════════════════════════════════════
-const RISE=6, TREAD=12, LD=36, RAIL_H=36*0.70;
-const W=70, SW=35, RW=35;
-const SX =  W/2 - SW/2;   // step-half centre X  = +17.5  (swapped to right)
-const RX = -W/2 + RW/2;   // ramp-half centre X  = -17.5  (swapped to left)
+// ── DIMENSIONS ──────────────────────────
+var RISE=6, TREAD=12, W=84, STEPS=18;
+var STAIR_Z = STEPS*TREAD;   // 216"  (back of last step)
+var STAIR_H = STEPS*RISE;    // 108"
 
-// Section Y/Z origins
-const S1_Y=0,  S1_Z=0;
-const L1_Y=18, L1_Z=36;
-const S2_Y=18, S2_Z=72;
-const L2_Y=36, L2_Z=108;
-const S3_Y=36, S3_Z=144;
-const totalZ=168;
+// Walls: start step 7, end step 18 (last step back face)
+var WALL_Z0  = 6*TREAD;       // 72"  step-7 front face
+var WALL_ZE  = STAIR_Z;       // 216" back of step 18
+var WALL_LEN = WALL_ZE - WALL_Z0;   // 144"
+var WALL_CZ  = WALL_Z0 + WALL_LEN/2; // 144"
 
-// ══════════════════════════════════════════
-//  MATERIALS
-// ══════════════════════════════════════════
-const mStep  = new THREE.MeshPhongMaterial({color:0xEDE0CE,shininess:15});
-const mCap   = new THREE.MeshPhongMaterial({color:0xF7F0E4,shininess:28});
-const mRiser = new THREE.MeshPhongMaterial({color:0xD4BFA0,shininess:8});
-const mLand  = new THREE.MeshPhongMaterial({color:0xE8D8C0,shininess:12});
-const mFill  = new THREE.MeshPhongMaterial({color:0xC0A878,shininess:4});
-const mRamp  = new THREE.MeshPhongMaterial({color:0xD8CCBA,shininess:20});
-const mRail  = new THREE.MeshPhongMaterial({color:0xEDE0CE,shininess:20});
+var WALL_H   = 54;            // 54" tall from ground
+var WALL_CY  = WALL_H/2;      // 27"
 
-// ══════════════════════════════════════════
-//  LABEL HELPERS
-//  Canvas aspect ratio = plane aspect ratio → no stretching
-//  No internal canvas rotation → no blurring / clipping
-// ══════════════════════════════════════════
-function makeLabel(lines, pw, ph){
-  const PX = 16; // pixels per scene-unit (inch)
-  const cw  = Math.max(256, Math.round(pw * PX));
-  const ch  = Math.max(64,  Math.round(ph * PX));
-  const cv  = document.createElement('canvas');
-  cv.width=cw; cv.height=ch;
-  const ctx = cv.getContext('2d');
-  const valid = lines.filter(l => l && l.length > 0);
-  const lh = ch / valid.length;
-  valid.forEach((line, i) => {
-    const fs = Math.min(Math.round(lh * 0.50), Math.round(cw * 0.28));
-    const fontSize = Math.max(8, fs);
-    ctx.font = `bold ${fontSize}px Arial,sans-serif`;
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'middle';
-    const y = (i + 0.5) * lh;
-    // crisp white halo
-    ctx.strokeStyle = 'rgba(255,255,255,0.98)';
-    ctx.lineWidth   = Math.max(3, fontSize * 0.30);
-    ctx.lineJoin    = 'round';
-    ctx.strokeText(line, cw/2, y);
-    // solid black fill
-    ctx.fillStyle = '#000000';
-    ctx.fillText(line, cw/2, y);
-  });
+// Left wall: 49.5" wide, inner face at X=-42
+var L_W  = 16.5;
+var L_CX = -(W/2 + L_W/2);   // -66.75
+
+// Right wall: 16.5" wide, inner face at X=+42
+var R_W  = 49.5;
+var R_CX = W/2 + R_W/2;       // +50.25
+
+// ── TEXTURES ────────────────────────────
+function makeStoneTex(){
+  var C=256, cv=document.createElement('canvas'); cv.width=C; cv.height=C;
+  var ctx=cv.getContext('2d');
+  ctx.fillStyle='#9a8878'; ctx.fillRect(0,0,C,C);
+  var rows=6, cols=4, bW=C/cols, bH=C/rows;
+  for(var r=0;r<rows;r++) for(var cl=0;cl<cols;cl++){
+    var ox=(r%2===0?bW/2:0), x=(cl*bW+ox)%C, y=r*bH;
+    var g=118+Math.random()*42;
+    ctx.fillStyle='rgb('+g+','+(g-10)+','+(g-22)+')';
+    ctx.fillRect(x+2,y+2,bW-5,bH-5);
+  }
+  ctx.strokeStyle='#6a5a4a'; ctx.lineWidth=3;
+  for(var r2=0;r2<=rows;r2++){ctx.beginPath();ctx.moveTo(0,r2*bH);ctx.lineTo(C,r2*bH);ctx.stroke();}
+  for(var r3=0;r3<rows;r3++){
+    var ox2=(r3%2===0?bW/2:0);
+    for(var c2=0;c2<=cols;c2++){
+      var xc=(c2*bW+ox2)%C;
+      ctx.beginPath();ctx.moveTo(xc,r3*bH);ctx.lineTo(xc,(r3+1)*bH);ctx.stroke();
+    }
+  }
+  var tex=new THREE.CanvasTexture(cv);
+  tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(4,3); return tex;
+}
+function makeGrassTex(){
+  var C=128, cv=document.createElement('canvas'); cv.width=C; cv.height=C;
+  var ctx=cv.getContext('2d');
+  ctx.fillStyle='#5a8a38'; ctx.fillRect(0,0,C,C);
+  for(var i=0;i<450;i++){
+    ctx.fillStyle=Math.random()>.5?'rgba(88,148,50,.5)':'rgba(38,68,18,.4)';
+    ctx.beginPath(); ctx.arc(Math.random()*C,Math.random()*C,Math.random()*4+1,0,Math.PI*2); ctx.fill();
+  }
+  var tex=new THREE.CanvasTexture(cv);
+  tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(3,3); return tex;
+}
+
+// ── MATERIALS ───────────────────────────
+var mStep  = new THREE.MeshPhongMaterial({color:0xEDE0CE,shininess:15});
+var mCap   = new THREE.MeshPhongMaterial({color:0xF7F0E4,shininess:32});
+var mRiser = new THREE.MeshPhongMaterial({color:0xD4BFA0,shininess:8});
+var mStone = new THREE.MeshPhongMaterial({map:makeStoneTex(),color:0xb0a090,shininess:6});
+var mGrass = new THREE.MeshLambertMaterial({map:makeGrassTex(),color:0x78b050});
+
+// ── HELPERS ─────────────────────────────
+function box(x,y,z,w,h,d,mat){
+  var m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),mat);
+  m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; scene.add(m); return m;
+}
+function grassTop(cx,cz,w,len){
+  var g=new THREE.Mesh(new THREE.BoxGeometry(w+0.5,3,len+0.5),mGrass);
+  g.position.set(cx, WALL_H+1.5, cz); scene.add(g);
+}
+function makeLabel(lines,pw,ph){
+  var PX=14, cw=Math.max(128,Math.round(pw*PX)), ch=Math.max(28,Math.round(ph*PX));
+  var cv=document.createElement('canvas'); cv.width=cw; cv.height=ch;
+  var ctx=cv.getContext('2d'), lh=ch/lines.length;
+  for(var i=0;i<lines.length;i++){
+    var ml=0; for(var j=0;j<lines.length;j++) if(lines[j].length>ml) ml=lines[j].length; if(ml<1)ml=1;
+    var fs=Math.max(8,Math.min(Math.round(lh*0.56),Math.round(cw/ml*1.05)));
+    ctx.font='bold '+fs+'px Courier New,monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    var y=(i+0.5)*lh;
+    ctx.strokeStyle='rgba(255,255,255,0.97)'; ctx.lineWidth=Math.max(2,fs*0.28); ctx.lineJoin='round';
+    ctx.strokeText(lines[i],cw/2,y); ctx.fillStyle='#0d0d0d'; ctx.fillText(lines[i],cw/2,y);
+  }
   return new THREE.CanvasTexture(cv);
 }
-
-// Place a flat label in the scene
-function addLabel(x,y,z, rx,ry,rz, pw,ph, lines){
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(pw, ph),
-    new THREE.MeshBasicMaterial({
-      map: makeLabel(lines,pw,ph),
-      transparent:true, opacity:0.95,
-      depthWrite:false, polygonOffset:true, polygonOffsetFactor:-2,
-      side: THREE.DoubleSide
-    })
-  );
-  mesh.rotation.set(rx,ry,rz);
-  mesh.position.set(x,y,z);
-  mesh.renderOrder = 5;
-  scene.add(mesh);
+function lbl(x,y,z,rx,ry,rz,pw,ph,lines){
+  var m=new THREE.Mesh(new THREE.PlaneGeometry(pw,ph),new THREE.MeshBasicMaterial({
+    map:makeLabel(lines,pw,ph),transparent:true,opacity:0.94,depthWrite:false,
+    polygonOffset:true,polygonOffsetFactor:-4,side:THREE.DoubleSide
+  }));
+  m.rotation.set(rx,ry,rz); m.position.set(x,y,z); m.renderOrder=6; scene.add(m);
 }
 
-// Label lying on an angled ramp surface
-function addRampSurfaceLabel(zMid,yMid, angle, lines){
-  const pw=RW*0.75, ph=11;
-  const cosA=Math.cos(angle), sinA=Math.sin(angle);
-  const offN=5; // units above surface
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(pw,ph),
-    new THREE.MeshBasicMaterial({
-      map: makeLabel(lines,pw,ph),
-      transparent:true, opacity:0.95,
-      depthWrite:false, polygonOffset:true, polygonOffsetFactor:-2,
-      side: THREE.DoubleSide
-    })
-  );
-  mesh.rotation.x = -(Math.PI/2 + angle);
-  mesh.position.set(RX, yMid + offN*cosA, zMid + offN*(-sinA));
-  mesh.renderOrder = 5;
-  scene.add(mesh);
+// ── STAIRCASE ───────────────────────────
+for(var i=0;i<STEPS;i++){
+  var topY=(i+1)*RISE, h=topY, frontZ=i*TREAD, cZ=frontZ+TREAD/2;
+  box(0,h/2,cZ,W,h,TREAD,mStep);
+  box(0,topY+0.7,cZ+0.8,W+0.4,1.4,TREAD+1.6,mCap);
+  box(0,topY-RISE/2,frontZ+0.45,W,RISE,0.9,mRiser);
+  lbl(0,topY+0.9,cZ,-Math.PI/2,0,0,70,10,['ST-'+(i+1),'84" x 12"']);
+  lbl(0,topY-RISE/2,frontZ-0.8,0,Math.PI,0,64,5.2,['6" RISE']);
 }
 
-// ══════════════════════════════════════════
-//  STEP BUILDER  (left half, X-centred at SX)
-// ══════════════════════════════════════════
-function addStep(localIdx, baseY, startZ, globalN){
-  const tY = baseY + (localIdx+1)*RISE;
-  const fZ = startZ + localIdx*TREAD;
-  const cz = fZ + TREAD/2;
-  const E  = 0.4;
+// ── LEFT WALL  49.5" wide, 54" tall, step7→step18 ───
+box(L_CX, WALL_CY, WALL_CZ, L_W, WALL_H, WALL_LEN, mStone);
+grassTop(L_CX, WALL_CZ, L_W, WALL_LEN);
 
-  // Slab
-  const slab = new THREE.Mesh(new THREE.BoxGeometry(SW,RISE,TREAD), mStep);
-  slab.position.set(SX, tY-RISE/2, cz);
-  slab.castShadow=true; slab.receiveShadow=true; scene.add(slab);
+// Labels — left wall
+lbl(L_CX, WALL_H+2, WALL_CZ,
+  -Math.PI/2,0,0, 47,16,
+  ['LEFT WALL','16.5" x 144"','H: 54"']);
+lbl(L_CX, WALL_CY, WALL_Z0-0.9,    // front face (−Z toward viewer)
+  0,Math.PI,0, 47,16,
+  ['LEFT WALL','16.5"W x 54"H']);
+lbl(L_CX-L_W/2-0.9, WALL_CY, WALL_CZ,  // outer side face (−X)
+  0,-Math.PI/2,0, 106,16,
+  ['LEFT WALL  16.5"W x 54"H  144" deep']);
 
-  // Nosing cap
-  const cap = new THREE.Mesh(new THREE.BoxGeometry(SW+0.3,1.2,TREAD+1.5), mCap);
-  cap.position.set(SX, tY+0.6, cz+0.75);
-  cap.castShadow=true; scene.add(cap);
+// ── RIGHT WALL  16.5" wide, 54" tall, step7→step18 ──
+box(R_CX, WALL_CY, WALL_CZ, R_W, WALL_H, WALL_LEN, mStone);
+grassTop(R_CX, WALL_CZ, R_W, WALL_LEN);
 
-  // Riser face (thin slab)
-  const rm = new THREE.Mesh(new THREE.BoxGeometry(SW,RISE,0.8), mRiser);
-  rm.position.set(SX, tY-RISE/2, fZ+0.4); scene.add(rm);
+// Labels — right wall
+lbl(R_CX, WALL_H+2, WALL_CZ,
+  -Math.PI/2,0,0, 15,16,
+  ['RT','49.5"','x144"']);
+lbl(R_CX, WALL_CY, WALL_Z0-0.9,
+  0,Math.PI,0, 15,16,
+  ['RT','49.5"','54"H']);
+lbl(R_CX+R_W/2+0.9, WALL_CY, WALL_CZ,
+  0,Math.PI/2,0, 106,16,
+  ['RIGHT WALL  49.5"W x 54"H  144" deep']);
 
-  // Fill volume under step
-  if(localIdx>0){
-    const fh=localIdx*RISE;
-    const fb=new THREE.Mesh(new THREE.BoxGeometry(SW-0.2,fh,TREAD),mFill);
-    fb.position.set(SX, baseY+fh/2, cz); fb.receiveShadow=true; scene.add(fb);
-  }
-
-  const n = globalN+1;
-  // Top face label
-  addLabel(SX, tY+1.3, cz, -Math.PI/2,0,0,
-    SW*0.80, TREAD*0.60, [`ST-${n}`, `R:${RISE}"  T:${TREAD}"`]);
-  // Front riser label (faces viewer approaching from -Z)
-  addLabel(SX, tY-RISE/2, fZ-E, 0,Math.PI,0,
-    SW*0.72, RISE*0.68, [`ST-${n}`, `${RISE}×${TREAD}"`]);
-}
-
-// ══════════════════════════════════════════
-//  LANDING BUILDER  (left half)
-// ══════════════════════════════════════════
-function addLanding(landY, startZ, num){
-  const th=6, E=0.4;
-  const mesh=new THREE.Mesh(new THREE.BoxGeometry(SW,th,LD),mLand);
-  mesh.position.set(SX, landY-th/2, startZ+LD/2);
-  mesh.castShadow=true; mesh.receiveShadow=true; scene.add(mesh);
-
-  const lcap=new THREE.Mesh(new THREE.BoxGeometry(SW+0.3,1.2,LD+0.4),mCap);
-  lcap.position.set(SX, landY+0.6, startZ+LD/2);
-  lcap.castShadow=true; scene.add(lcap);
-
-  addLabel(SX, landY+1.3, startZ+LD/2, -Math.PI/2,0,0,
-    SW*0.78, LD*0.58, [`LANDING-${num}`, `${LD}"×${SW}"`, `H:${landY}"`]);
-}
-
-// ══════════════════════════════════════════
-//  RAMP BUILDER  — 5 segments
-//  Profile:  slope(0-36) → flat(36-72) → slope(72-108)
-//            → flat(108-144) → slope(144-168)
-// ══════════════════════════════════════════
-function addRampSegment(zStart,yStart,zEnd,yEnd){
-  const run  = zEnd - zStart;
-  const rise = yEnd - yStart;
-  const thick = 7;
-
-  if(Math.abs(rise) < 0.01){
-    // ── FLAT PLATEAU ──
-    const mesh=new THREE.Mesh(new THREE.BoxGeometry(RW,thick,run),mRamp);
-    mesh.position.set(RX, yStart-thick/2, (zStart+zEnd)/2);
-    mesh.castShadow=true; mesh.receiveShadow=true; scene.add(mesh);
-    addLabel(RX, yStart+1.5, (zStart+zEnd)/2, -Math.PI/2,0,0,
-      RW*0.76, run*0.52, [`FLAT  ${run}"`, `H: ${yStart}"`]);
-
-  } else {
-    // ── SLOPE ──
-    const angle  = Math.atan2(rise, run);
-    const diagLen= Math.sqrt(run*run + rise*rise);
-    const cosA   = Math.cos(angle), sinA = Math.sin(angle);
-
-    // Position so top-front corner lands at world (RX, yStart, zStart)
-    const cy = yStart - ( thick/2*cosA - diagLen/2*sinA);
-    const cz_= zStart - (-thick/2*sinA - diagLen/2*cosA);
-
-    const mesh=new THREE.Mesh(new THREE.BoxGeometry(RW,thick,diagLen),mRamp);
-    mesh.rotation.x = -angle;
-    mesh.position.set(RX, cy, cz_);
-    mesh.castShadow=true; mesh.receiveShadow=true; scene.add(mesh);
-
-    const pct = Math.round(rise*100/run);
-    addRampSurfaceLabel(
-      zStart + run/2, yStart + rise/2, angle,
-      [`RAMP  ${run}"↗${rise}"`, `slope: ${pct}%`]
-    );
-  }
-}
-
-// Build ramp
-addRampSegment(0,   0,  36, 18);   // slope 1  (0→36 run, 0→18 rise)
-addRampSegment(36,  18, 72, 18);   // plateau 1
-addRampSegment(72,  18,108, 36);   // slope 2  (72→108, 18→36)
-addRampSegment(108, 36,144, 36);   // plateau 2
-addRampSegment(144, 36,168, 48);   // slope 3  (144→168, 36→48)
-
-// ══════════════════════════════════════════
-//  BUILD STAIRCASE
-// ══════════════════════════════════════════
-for(let i=0;i<3;i++) addStep(i,S1_Y,S1_Z,i);
-addLanding(L1_Y,L1_Z,1);
-for(let i=0;i<3;i++) addStep(i,S2_Y,S2_Z,3+i);
-addLanding(L2_Y,L2_Z,2);
-for(let i=0;i<2;i++) addStep(i,S3_Y,S3_Z,6+i);
-
-// ══════════════════════════════════════════
-//  RAILING  — at X=0 (between ramp and steps)
-// ══════════════════════════════════════════
-(function buildRailing(){
-  const X = 0;  // boundary line
-
-  function post(z, yBot, yTop){
-    const h = yTop - yBot;
-    if(h <= 0) return;
-    const p = new THREE.Mesh(new THREE.BoxGeometry(1.8,h,1.8), mRail);
-    p.position.set(X, yBot+h/2, z);
-    p.castShadow=true; scene.add(p);
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(1.2,8,6), mRail);
-    cap.position.set(X, yTop, z);
-    scene.add(cap);
-  }
-
-  // Cylinder along the YZ slope from (z0,y0) to (z1,y1)
-  function handrail(z0,y0,z1,y1, rad=1.05){
-    const dz=z1-z0, dy=y1-y0;
-    const len=Math.sqrt(dz*dz+dy*dy);
-    if(len<0.1) return;
-    const cyl=new THREE.Mesh(new THREE.CylinderGeometry(rad,rad,len,12), mRail);
-    // rotation.x = atan2(dz,dy) aligns cylinder axis with (0,dy,dz) direction
-    cyl.rotation.x = Math.atan2(dz,dy);
-    cyl.position.set(X, (y0+y1)/2, (z0+z1)/2);
-    cyl.castShadow=true; scene.add(cyl);
-  }
-
-  // Key profile transitions [z, Y-surface] — steps side
-  const profile = [
-    [0,   0 ],
-    [36,  18],
-    [72,  18],
-    [108, 36],
-    [144, 36],
-    [168, 48]
-  ];
-
-  // Posts at every major transition + midpoints of landings
-  const postPts = [
-    [0,   0 ],[12,  6 ],[24,  12],
-    [36,  18],[54,  18],
-    [72,  18],[84,  24],[96,  30],
-    [108, 36],[126, 36],
-    [144, 36],[156, 42],[168, 48]
-  ];
-  postPts.forEach(([z,ys]) => post(z, ys, ys + RAIL_H));
-
-  // Top handrail following full profile
-  for(let i=0;i<profile.length-1;i++){
-    const [z0,y0]=profile[i], [z1,y1]=profile[i+1];
-    handrail(z0, y0+RAIL_H, z1, y1+RAIL_H, 1.05);
-  }
-
-  // Mid handrail at 55%
-  const MH = RAIL_H * 0.55;
-  for(let i=0;i<profile.length-1;i++){
-    const [z0,y0]=profile[i], [z1,y1]=profile[i+1];
-    handrail(z0, y0+MH, z1, y1+MH, 0.70);
-  }
-})();
-
-// ══════════════════════════════════════════
-//  STONE WALLS  (positions SWAPPED)
-// ══════════════════════════════════════════
-(function buildWalls(){
-
-  function makeStoneTex(wL,wH){
-    const C=256, c=document.createElement('canvas'); c.width=C; c.height=C;
-    const ctx=c.getContext('2d');
-    ctx.fillStyle='#9a8878'; ctx.fillRect(0,0,C,C);
-    const rows=6, cols=4, bW=C/cols, bH=C/rows;
-    for(let r=0;r<rows;r++) for(let cl=0;cl<cols;cl++){
-      const ox=(r%2===0?bW/2:0);
-      const x=(cl*bW+ox)%C, y=r*bH;
-      const g=118+Math.random()*42;
-      ctx.fillStyle=`rgb(${g},${g-10},${g-22})`;
-      ctx.fillRect(x+2,y+2,bW-5,bH-5);
-    }
-    ctx.strokeStyle='#6a5a4a'; ctx.lineWidth=3;
-    for(let r=0;r<=rows;r++){ctx.beginPath();ctx.moveTo(0,r*bH);ctx.lineTo(C,r*bH);ctx.stroke();}
-    for(let r=0;r<rows;r++){
-      const ox=(r%2===0?bW/2:0);
-      for(let cl=0;cl<=cols;cl++){
-        const x=(cl*bW+ox)%C;
-        ctx.beginPath();ctx.moveTo(x,r*bH);ctx.lineTo(x,(r+1)*bH);ctx.stroke();
-      }
-    }
-    const tex=new THREE.CanvasTexture(c);
-    tex.wrapS=tex.wrapT=THREE.RepeatWrapping;
-    tex.repeat.set(wL/48,wH/48);
-    return tex;
-  }
-
-  function makeGrassTex(){
-    const C=128, c=document.createElement('canvas'); c.width=C; c.height=C;
-    const ctx=c.getContext('2d');
-    ctx.fillStyle='#5a8a38'; ctx.fillRect(0,0,C,C);
-    for(let i=0;i<450;i++){
-      ctx.fillStyle=Math.random()>.5?'rgba(88,148,50,.5)':'rgba(38,68,18,.4)';
-      ctx.beginPath(); ctx.arc(Math.random()*C,Math.random()*C,Math.random()*4+1,0,Math.PI*2); ctx.fill();
-    }
-    const tex=new THREE.CanvasTexture(c);
-    tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(3,3);
-    return tex;
-  }
-
-  const grassMat=new THREE.MeshLambertMaterial({map:makeGrassTex(),color:0x78b050});
-
-  function makeWall(cx,cy,cz, wW,wH,wL){
-    const mat=new THREE.MeshPhongMaterial({map:makeStoneTex(wL,wH),shininess:6,color:0xb0a090});
-    const body=new THREE.Mesh(new THREE.BoxGeometry(wW,wH,wL),mat);
-    body.position.set(cx,cy,cz); body.castShadow=true; body.receiveShadow=true; scene.add(body);
-    const grass=new THREE.Mesh(new THREE.BoxGeometry(wW+1,3,wL+1),grassMat);
-    grass.position.set(cx,cy+wH/2+1.5,cz); scene.add(grass);
-  }
-
-  // Right wall — 48" tall
-  const w1L=totalZ-48, w1H=48, w1W=50;
-  makeWall( W/2+w1W/2, w1H/2, 48+w1L/2, w1W,w1H,w1L);
-
-  // Left wall — 48" tall
-  const w2L=totalZ-60, w2H=48, w2W=25;
-  makeWall(-W/2-w2W/2, w2H/2, 60+w2L/2, w2W,w2H,w2L);
-})();
-
-// ══════════════════════════════════════════
-//  GRASS GROUND
-// ══════════════════════════════════════════
+// ── GRASS GROUND ────────────────────────
 (function(){
-  const c=document.createElement('canvas'); c.width=256; c.height=256;
-  const ctx=c.getContext('2d');
+  var cv=document.createElement('canvas'); cv.width=256; cv.height=256;
+  var ctx=cv.getContext('2d');
   ctx.fillStyle='#607848'; ctx.fillRect(0,0,256,256);
-  for(let i=0;i<2000;i++){
+  for(var i=0;i<2000;i++){
     ctx.fillStyle=Math.random()>.5?'rgba(96,144,56,.5)':'rgba(40,68,18,.4)';
     ctx.beginPath(); ctx.arc(Math.random()*256,Math.random()*256,Math.random()*4+1,0,Math.PI*2); ctx.fill();
   }
-  const tex=new THREE.CanvasTexture(c);
+  var tex=new THREE.CanvasTexture(cv);
   tex.wrapS=tex.wrapT=THREE.RepeatWrapping; tex.repeat.set(60,60);
-  const gnd=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400),
+  var gnd=new THREE.Mesh(new THREE.PlaneGeometry(1400,1400),
     new THREE.MeshLambertMaterial({map:tex,color:0x88b060}));
   gnd.rotation.x=-Math.PI/2; gnd.receiveShadow=true; scene.add(gnd);
-  const grid=new THREE.GridHelper(1400,100,0x4a6830,0x3a5224);
+  var grid=new THREE.GridHelper(1400,100,0x4a6830,0x3a5224);
   grid.position.y=0.3; scene.add(grid);
 })();
 
-// ══════════════════════════════════════════
-//  CLOUDS
-// ══════════════════════════════════════════
+// ── CLOUDS ──────────────────────────────
 (function(){
-  const c=document.createElement('canvas'); c.width=300; c.height=140;
-  const ctx=c.getContext('2d'); ctx.clearRect(0,0,300,140);
-  [[90,70,60],[150,55,75],[210,65,55],[115,95,42],[175,88,40]].forEach(([cx,cy,r])=>{
-    const g=ctx.createRadialGradient(cx,cy,r*.08,cx,cy,r);
-    g.addColorStop(0,'rgba(255,255,255,.95)');
-    g.addColorStop(.7,'rgba(235,245,255,.55)');
-    g.addColorStop(1,'rgba(200,225,255,0)');
+  var cv=document.createElement('canvas'); cv.width=300; cv.height=140;
+  var ctx=cv.getContext('2d'); ctx.clearRect(0,0,300,140);
+  var cl=[[90,70,60],[150,55,75],[210,65,55],[115,95,42],[175,88,40]];
+  for(var i=0;i<cl.length;i++){
+    var cx=cl[i][0],cy=cl[i][1],r=cl[i][2];
+    var g=ctx.createRadialGradient(cx,cy,r*.08,cx,cy,r);
+    g.addColorStop(0,'rgba(255,255,255,.95)'); g.addColorStop(.7,'rgba(235,245,255,.55)'); g.addColorStop(1,'rgba(200,225,255,0)');
     ctx.fillStyle=g; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-  });
-  const tex=new THREE.CanvasTexture(c);
-  [[0,320,-200],[240,290,20],[-260,310,120],[120,270,310],[-140,345,-110]].forEach(([x,y,z])=>{
-    const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:.85,depthWrite:false}));
-    sp.position.set(x,y,z); const s=90+Math.random()*60; sp.scale.set(s*2.4,s,1); scene.add(sp);
-  });
+  }
+  var tex=new THREE.CanvasTexture(cv);
+  var pos=[[0,320,-200],[240,290,20],[-260,310,120],[120,270,200],[-140,345,-110]];
+  for(var i=0;i<pos.length;i++){
+    var sp=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,opacity:.85,depthWrite:false}));
+    sp.position.set(pos[i][0],pos[i][1],pos[i][2]);
+    var s=90+Math.random()*60; sp.scale.set(s*2.4,s,1); scene.add(sp);
+  }
 })();
 
-// ══════════════════════════════════════════
-//  CAMERA ORBIT
-// ══════════════════════════════════════════
-let theta=0.68, phi=1.10, radius=260;
-const target=new THREE.Vector3(0,28,84);
-let autoRot=true;
+// ── CAMERA ──────────────────────────────
+var theta=Math.PI+0.45, phi=0.88, radius=330;
+var target=new THREE.Vector3(0,50,144);
+var autoRot=true;
 
 function sync(){
   camera.position.set(
-    target.x + radius*Math.sin(phi)*Math.sin(theta),
-    target.y + radius*Math.cos(phi),
-    target.z + radius*Math.sin(phi)*Math.cos(theta)
-  );
+    target.x+radius*Math.sin(phi)*Math.sin(theta),
+    target.y+radius*Math.cos(phi),
+    target.z+radius*Math.sin(phi)*Math.cos(theta));
   camera.lookAt(target);
 }
 sync();
 
-let drag=false, rDrag=false, px=0, py=0;
-renderer.domElement.addEventListener('mousedown',e=>{drag=true;rDrag=e.button===2;px=e.clientX;py=e.clientY;e.preventDefault();});
-renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
-window.addEventListener('mouseup',()=>drag=false);
-window.addEventListener('mousemove',e=>{
+var drag=false,rDrag=false,px=0,py=0;
+renderer.domElement.addEventListener('mousedown',function(e){drag=true;rDrag=e.button===2;px=e.clientX;py=e.clientY;e.preventDefault();});
+renderer.domElement.addEventListener('contextmenu',function(e){e.preventDefault();});
+window.addEventListener('mouseup',function(){drag=false;});
+window.addEventListener('mousemove',function(e){
   if(!drag)return;
-  const dx=e.clientX-px, dy=e.clientY-py; px=e.clientX; py=e.clientY;
+  var dx=e.clientX-px,dy=e.clientY-py;px=e.clientX;py=e.clientY;
   if(rDrag){
-    const r=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),
+    var rv=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),
       new THREE.Vector3().subVectors(camera.position,target).normalize()).normalize();
-    target.addScaledVector(r,-dx*0.25); target.y+=dy*0.25;
-  } else {
-    theta-=dx*0.012;
-    phi=Math.max(0.05,Math.min(Math.PI*0.92,phi-dy*0.012));
-  }
+    target.addScaledVector(rv,-dx*0.25);target.y+=dy*0.25;
+  }else{theta-=dx*0.012;phi=Math.max(0.05,Math.min(Math.PI*0.92,phi-dy*0.012));}
   sync();
 });
-renderer.domElement.addEventListener('wheel',e=>{
-  radius=Math.max(40,Math.min(700,radius*(1+e.deltaY*0.001))); sync();
+renderer.domElement.addEventListener('wheel',function(e){
+  radius=Math.max(40,Math.min(900,radius*(1+e.deltaY*0.001)));sync();
 },{passive:true});
-
-let prevP=0;
-renderer.domElement.addEventListener('touchstart',e=>{
+var prevP=0;
+renderer.domElement.addEventListener('touchstart',function(e){
   e.preventDefault();
   if(e.touches.length===1){drag=true;rDrag=false;px=e.touches[0].clientX;py=e.touches[0].clientY;}
   if(e.touches.length===2){drag=false;prevP=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);}
 },{passive:false});
-renderer.domElement.addEventListener('touchmove',e=>{
+renderer.domElement.addEventListener('touchmove',function(e){
   e.preventDefault();
   if(e.touches.length===1&&drag){
-    const dx=e.touches[0].clientX-px, dy=e.touches[0].clientY-py;
-    px=e.touches[0].clientX; py=e.touches[0].clientY;
-    theta-=dx*0.012; phi=Math.max(0.05,Math.min(Math.PI*0.92,phi-dy*0.012)); sync();
+    var dx=e.touches[0].clientX-px,dy=e.touches[0].clientY-py;
+    px=e.touches[0].clientX;py=e.touches[0].clientY;
+    theta-=dx*0.012;phi=Math.max(0.05,Math.min(Math.PI*0.92,phi-dy*0.012));sync();
   }
   if(e.touches.length===2){
-    const p=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-    radius=Math.max(40,Math.min(700,radius*(prevP/p))); prevP=p; sync();
+    var p=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
+    radius=Math.max(40,Math.min(900,radius*(prevP/p)));prevP=p;sync();
   }
 },{passive:false});
-renderer.domElement.addEventListener('touchend',()=>drag=false);
+renderer.domElement.addEventListener('touchend',function(){drag=false;});
 
-function toggleAuto(){
-  autoRot=!autoRot;
-  document.getElementById('btn').textContent='⟳ Auto: '+(autoRot?'ON':'OFF');
-}
-
-function animate(){
-  requestAnimationFrame(animate);
-  if(autoRot&&!drag){theta+=0.003;sync();}
-  renderer.render(scene,camera);
-}
+function toggleAuto(){autoRot=!autoRot;document.getElementById('btn').textContent='⟳ Auto: '+(autoRot?'ON':'OFF');}
+function animate(){requestAnimationFrame(animate);if(autoRot&&!drag){theta+=0.003;sync();}renderer.render(scene,camera);}
 animate();
 </script>
 </body>
